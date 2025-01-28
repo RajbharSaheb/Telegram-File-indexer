@@ -54,6 +54,10 @@ def set_channel(update: Update, context: CallbackContext):
 
 def handle_video(update: Update, context: CallbackContext):
     """Handle video file uploads."""
+    if not update.effective_user:
+        update.message.reply_text("User not identified. Only user messages are allowed.")
+        return
+
     user_id = update.effective_user.id
 
     if user_id not in user_configs:
@@ -87,7 +91,6 @@ def handle_video(update: Update, context: CallbackContext):
     db_handler.add_video(video_data)
 
     update.message.reply_text(f"Video indexed to MongoDB with ID: {video.file_id}")
-
 def index_videos(update: Update, context: CallbackContext):
     """Retrieve all indexed videos from the database."""
     user_id = update.effective_user.id
