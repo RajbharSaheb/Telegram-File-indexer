@@ -1,12 +1,10 @@
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from pymongo import MongoClient
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from db_handler import DBHandler
+from config import BOT_TOKEN
 import time
 
-# Import configurations
-from config import BOT_TOKEN
-
-# Initialize database dictionary for user-specific settings
+# User-specific configurations (stored in memory)
 user_configs = {}
 
 def start(update: Update, context: CallbackContext):
@@ -69,15 +67,13 @@ def handle_video(update: Update, context: CallbackContext):
         update.message.reply_text("Please send a video file.")
         return
 
-    # Get MongoDB configuration
-    mongodb_url = user_config["mongodb_url"]
-    db_name = user_config["db_name"]
-    collection_name = user_config["collection_name"]
+    # Initialize DBHandler with user configuration
+    db_handler = DBHandler(user_config["mongodb_url"], user_config["db_name"], user_config["collection_name"])
 
-    # Connect to MongoDB
-    client = MongoClient(mongodb_url)
-    db = client[db_name]
-    collection = db[collection_name]
+    # Check for duplicates
+    if db_handler.is_duplicate(video.file_unique_id):
+        update.message.reply_text(f"Duplicate file skipped: {video.file_name or 'Unnamed Video'}")
+        return
 
     # Index video metadata to MongoDB
     video_data = {
@@ -88,7 +84,7 @@ def handle_video(update: Update, context: CallbackContext):
         "file_size": video.file_size,
         "channel_id": user_config.get("channel_id"),
     }
-    collection.insert_one(video_data)
+    db_handler.add_video(video_data)
 
     update.message.reply_text(f"Video indexed to MongoDB with ID: {video.file_id}")
 
@@ -101,20 +97,9 @@ def index_videos(update: Update, context: CallbackContext):
         return
 
     user_config = user_configs[user_id]
+    db_handler = DBHandler(user_config["mongodb_url"], user_config["db_name"], user_config["collection_name"])
 
-    # Get MongoDB configuration
-    mongodb_url = user_config["mongodb_url"]
-    db_name = user_config["db_name"]
-    collection_name = user_config["collection_name"]
-
-    # Connect to MongoDB
-    client = MongoClient(mongodb_url)
-    db = client[db_name]
-    collection = db[collection_name]
-
-    # Retrieve all video entries
-    videos = list(collection.find({}, {"_id": 0}))  # Exclude MongoDB's internal `_id` field
-
+    videos = db_handler.get_all_videos()
     if not videos:
         update.message.reply_text("No videos indexed yet.")
         return
@@ -129,71 +114,21 @@ def index_videos(update: Update, context: CallbackContext):
             f"File Size: {video.get('file_size', 'N/A')} bytes\n"
             f"Channel ID: {video.get('channel_id', 'N/A')}\n\n"
         )
-
     update.message.reply_text(response)
-
-def index_progress(update: Update, context: CallbackContext):
-    """Show progress of indexing files."""
-    user_id = update.effective_user.id
-
-    if user_id not in user_configs:
-        update.message.reply_text("Please configure MongoDB and channel using /set_db and /set_channel.")
-        return
-
-    user_config = user_configs[user_id]
-
-    # Get MongoDB configuration
-    mongodb_url = user_config["mongodb_url"]
-    db_name = user_config["db_name"]
-    collection_name = user_config["collection_name"]
-
-    # Connect to MongoDB
-    client = MongoClient(mongodb_url)
-    db = client[db_name]
-    collection = db[collection_name]
-
-    # Retrieve total and indexed videos
-    total_videos = collection.count_documents({})
-    if total_videos == 0:
-        update.message.reply_text("No videos indexed yet.")
-        return
-
-    # Simulate progress
-    processed_videos = 0
-    start_time = time.time()
-
-    for _ in range(total_videos):
-        time.sleep(0.5)  # Simulate time taken to process
-        processed_videos += 1
-        elapsed_time = time.time() - start_time
-        remaining_videos = total_videos - processed_videos
-        remaining_time = (elapsed_time / processed_videos) * remaining_videos if processed_videos > 0 else 0
-
-        progress = (processed_videos / total_videos) * 100
-        update.message.reply_text(
-            f"Progress: {progress:.2f}%\n"
-            f"Processed: {processed_videos}/{total_videos}\n"
-            f"Estimated Time Remaining: {remaining_time:.2f} seconds"
-        )
-
-    update.message.reply_text("Indexing complete!")
 
 def main():
     """Run the bot."""
-    updater = Updater(BOT_TOKEN)
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Add handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("set_db", set_db))
-    dispatcher.add_handler(CommandHandler("set_channel", set_channel))
-    dispatcher.add_handler(CommandHandler("index", index_videos))
-    dispatcher.add_handler(CommandHandler("index_progress", index_progress))
-    dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("set_db", set_db))
+    application.add_handler(CommandHandler("set_channel", set_channel))
+    application.add_handler(CommandHandler("index", index_videos))
+    application.add_handler(MessageHandler(filters.Video(), handle_video))
 
     # Start the bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
