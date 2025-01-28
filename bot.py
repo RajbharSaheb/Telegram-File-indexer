@@ -3,6 +3,43 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from db_handler import DBHandler
 from config import BOT_TOKEN
 import time
+import os
+from flask import Flask
+from telegram.ext import Application
+from threading import Thread
+
+# Initialize Flask app for health check
+app = Flask(__name__)
+
+# Health check endpoint
+@app.route("/health", methods=["GET"])
+def health_check():
+    return "OK", 200
+
+# Function to start the Flask server in the background
+def run_flask():
+    try:
+        port = int(os.getenv("PORT", 8000))  # Get the correct port
+        app.run(host="0.0.0.0", port=port)
+    except Exception as e:
+        print(f"Error starting Flask server: {e}")
+
+# Start the Flask app in a separate thread so it runs alongside the bot
+flask_thread = Thread(target=run_flask)
+flask_thread.daemon = True  # This ensures the Flask server stops when the main program exits
+flask_thread.start()
+
+# Telegram Bot Logic
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Make sure this is set correctly
+
+# Initialize the Telegram application (bot)
+application = Application.builder().token(BOT_TOKEN).build()
+
+# Your existing bot handlers go here
+# application.add_handler(...)
+
+# Run the bot with polling
+application.run_polling()
 
 # User-specific configurations (stored in memory)
 user_configs = {}
