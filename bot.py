@@ -125,7 +125,7 @@ def main():
     application.add_handler(CommandHandler("set_db", set_db))
     application.add_handler(CommandHandler("set_channel", set_channel))
     application.add_handler(CommandHandler("index", index_videos))
-    application.add_handler(MessageHandler(filters.Video(), handle_video))
+    application.add_handler(MessageHandler(filters.VIDEO, handle_video))
 
     # Start the bot
     application.run_polling()
