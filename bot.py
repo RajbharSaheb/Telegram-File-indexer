@@ -52,23 +52,23 @@ def set_channel(update: Update, context: CallbackContext):
     user_configs[user_id]["channel_id"] = channel_id
     update.message.reply_text("Channel ID saved!")
 
-def handle_video(update: Update, context: CallbackContext):
+async def handle_video(update: Update, context: CallbackContext):
     """Handle video file uploads."""
     if not update.effective_user:
-        update.message.reply_text("User not identified. Only user messages are allowed.")
+        await update.message.reply_text("User not identified. Only user messages are allowed.")
         return
 
     user_id = update.effective_user.id
 
     if user_id not in user_configs:
-        update.message.reply_text("Please configure MongoDB and channel using /set_db and /set_channel.")
+        await update.message.reply_text("Please configure MongoDB and channel using /set_db and /set_channel.")
         return
 
     user_config = user_configs[user_id]
 
     video = update.message.video
     if not video:
-        update.message.reply_text("Please send a video file.")
+        await update.message.reply_text("Please send a video file.")
         return
 
     # Initialize DBHandler with user configuration
@@ -76,7 +76,7 @@ def handle_video(update: Update, context: CallbackContext):
 
     # Check for duplicates
     if db_handler.is_duplicate(video.file_unique_id):
-        update.message.reply_text(f"Duplicate file skipped: {video.file_name or 'Unnamed Video'}")
+        await update.message.reply_text(f"Duplicate file skipped: {video.file_name or 'Unnamed Video'}")
         return
 
     # Index video metadata to MongoDB
@@ -90,7 +90,8 @@ def handle_video(update: Update, context: CallbackContext):
     }
     db_handler.add_video(video_data)
 
-    update.message.reply_text(f"Video indexed to MongoDB with ID: {video.file_id}")
+    await update.message.reply_text(f"Video indexed to MongoDB with ID: {video.file_id}")
+    
 def index_videos(update: Update, context: CallbackContext):
     """Retrieve all indexed videos from the database."""
     user_id = update.effective_user.id
